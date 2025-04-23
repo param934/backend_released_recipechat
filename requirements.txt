@@ -1,0 +1,13 @@
+flask==2.3.3
+flask-cors==4.0.0
+flask-socketio==5.3.6
+python-socketio==5.9.0
+python-engineio==4.7.1
+asyncio==3.4.3
+werkzeug==2.3.7
+langchain-community==0.0.21
+yt-dlp==2024.3.10
+python-dotenv==1.0.1
+together==0.2.8
+warnings2==0.4.1
+logging==0.4.9.6
