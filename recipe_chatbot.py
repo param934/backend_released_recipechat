@@ -1,3 +1,15 @@
+import warnings
+import logging
+import re
+from langchain_community.llms.ollama import Ollama
+import asyncio
+import yt_dlp
+import re
+import json
+import os
+from dotenv import load_dotenv
+from together import Together
+
 NUTRITION_PROMPT = """
 You are a dietitian. Analyze the recipe details below to calculate the nutritional values (calories, protein, carbs, fat, fiber, vitamins). Provide per-serving and total values if applicable. Answer only what is asked by the user.
 
@@ -104,17 +116,6 @@ Include relevant culinary techniques, ingredient substitutions, or time-saving t
 Maintain a respectful, supportive, and encouraging tone.
 """
 
-import warnings
-import logging
-import re
-from langchain_community.llms.ollama import Ollama
-import asyncio
-import yt_dlp
-import re
-import json
-import os
-from dotenv import load_dotenv
-from together import Together
 
 # Suppress warnings and logging for cleaner output
 warnings.filterwarnings("ignore")
