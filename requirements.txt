@@ -9,3 +9,4 @@ langchain-community==0.0.21
 yt-dlp==2024.3.10
 python-dotenv==1.0.1
 together==0.2.8
+gunicorn==20.1.0
