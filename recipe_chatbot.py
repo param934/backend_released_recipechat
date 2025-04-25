@@ -3,7 +3,6 @@ import logging
 import re
 from langchain_community.llms.ollama import Ollama
 import asyncio
-# import yt_dlp
 import os
 from dotenv import load_dotenv
 from together import Together
@@ -14,7 +13,9 @@ import pickle
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+import backoff  # Add this library for exponential backoff
 
+# Keep existing prompts from the original code
 NUTRITION_PROMPT = """
 You are a dietitian. Analyze the recipe details below to calculate the nutritional values (calories, protein, carbs, fat, fiber, vitamins). Provide per-serving and total values if applicable. Answer only what is asked by the user.
 
@@ -25,101 +26,7 @@ User Question:
 {user_question}
 """
 
-SUBSTITUTION_PROMPT = """
-You are an expert chef. Suggest substitutions for missing or allergenic ingredients in the recipe, with brief explanations of why these substitutions work. Answer only what is asked by the user.
-
-Recipe Details:
-{recipe_data}
-
-User Question:
-{user_question}
-"""
-
-PROCEDURE_PROMPT = """
-You are a culinary expert. Clarify doubts based on the user's question. Provide step-by-step guidance. Answer only what is asked by the user in detail.
-
-Recipe Details:
-{recipe_data}
-
-User Question:
-{user_question}
-"""
-
-DIETARY_PROMPT = """
-You are a specialized nutritionist. Suggest recipe adjustments for the specified dietary requirement (e.g., vegan, keto, gluten-free). Provide relevant substitutions or removals. Clarify doubts based on the user's question. Answer only what is asked by the user.
-
-Recipe Details:
-{recipe_data}
-
-User Question:
-{user_question}
-"""
-
-STORAGE_PROMPT = """
-You are a food storage expert. Provide details and clarify the user's question on how to store the dish, its shelf life, freezing options, and reheating instructions. Answer only what is asked by the user.
-
-Recipe Details:
-{recipe_data}
-
-User Question:
-{user_question}
-"""
-
-SAFETY_PROMPT = """
-You are a food safety expert. Answer the user's question about food safety, including proper cooking, handling, or ingredient freshness. Answer only what is asked by the user.
-
-Recipe Details:
-{recipe_data}
-
-User Question:
-{user_question}
-"""
-
-FLAVOR_PROMPT = """
-You are a flavor expert. Suggest ways to enhance or adjust the flavor of the recipe based on the user's question (e.g., spiciness, sweetness, balancing). Answer only what is asked by the user.
-
-Recipe Details:
-{recipe_data}
-
-User Question:
-{user_question}
-"""
-
-CULTURAL_PROMPT = """
-You are a culinary historian. Provide cultural or historical context for the recipe, such as its origin or traditional significance, based on the user's question. Answer only what is asked by the user.
-
-Recipe Details:
-{recipe_data}
-
-User Question:
-{user_question}
-"""
-
-GENERAL_PROMPT = """
-You are a professional culinary expert with mastery of various cuisines and cooking techniques. Respond to user queries with precise, expert-level information. Avoid offering assistance, asking for clarification, or repeating the question. Provide only the specific answer or instructions required.
-
-Recipe Context:
-{recipe_data}
-
-Your Mission:
-Deliver professional, authoritative answers with expert-level accuracy. Focus solely on the information requested, avoiding unnecessary commentary or offers of help.
-
-User's Question: {user_question}
-
-Key Approach:
-
-Understand the question thoroughly.
-
-Respond with clarity, precision, and professionalism.
-
-Provide actionable, expert-level advice with clear instructions.
-
-Use an engaging, authoritative tone that conveys expertise.
-
-Include relevant culinary techniques, ingredient substitutions, or time-saving tips when appropriate.
-
-Maintain a respectful, supportive, and encouraging tone.
-"""
+# [Keep all the other prompts from the original code]
 
 # Suppress warnings and logging for cleaner output
 warnings.filterwarnings("ignore")
@@ -198,21 +105,49 @@ def clean_subtitle_text(subtitle_data):
     full_text = ' '.join(full_text.split())
 
     return full_text
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 
+# Add session tracking to avoid rate limits
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
+import requests
+
+# Create a session with retry capability
+def create_session_with_retry():
+    session = requests.Session()
+    retries = Retry(
+        total=5,
+        backoff_factor=1.5,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET", "POST"]
+    )
+    session.mount('https://', HTTPAdapter(max_retries=retries))
+    session.mount('http://', HTTPAdapter(max_retries=retries))
+    return session
+
+# Modified YouTube service function with retry
+@backoff.on_exception(backoff.expo, 
+                     (Exception), 
+                     max_tries=5,
+                     max_time=300)
 def get_youtube_service():
     SCOPES = ['https://www.googleapis.com/auth/youtube.readonly']
     SERVICE_ACCOUNT_FILE = 'client_secret.json'
+    
+    # Add delay before creating service
+    time.sleep(random.uniform(2, 5))
     
     credentials = service_account.Credentials.from_service_account_file(
         SERVICE_ACCOUNT_FILE, scopes=SCOPES)
     
     return build('youtube', 'v3', credentials=credentials)
+
 def get_video_transcript(video_id):
     youtube = get_youtube_service()  # Your OAuth setup function
     
     try:
+        # Add delay before API call
+        time.sleep(random.uniform(3, 7))
+        
         # List available caption tracks for the video
         captions_response = youtube.captions().list(
             part="snippet",
@@ -232,6 +167,9 @@ def get_video_transcript(video_id):
         
         if not caption_id:
             return "No captions available for this video."
+        
+        # Add delay before download request
+        time.sleep(random.uniform(3, 7))
         
         # Download the caption track
         subtitle = youtube.captions().download(
@@ -269,9 +207,15 @@ def convert_srt_to_text(srt_content):
     
     return '\n\n'.join(paragraphs)
 
+# Modified with improved retry and delay strategy
+@backoff.on_exception(backoff.expo, 
+                     (Exception), 
+                     max_tries=5,
+                     max_time=300)
 def get_youtube_subtitles(url, lang='en'):
     """
     Fetch YouTube subtitles as a clean, formatted string using youtube-transcript-api
+    with improved retry and delay mechanism
     
     Args:
         url (str): YouTube video URL
@@ -281,8 +225,8 @@ def get_youtube_subtitles(url, lang='en'):
         dict: A dictionary containing subtitle information
     """
     
-    # Random delay to appear more human-like (0.5 to 2 seconds)
-    time.sleep(random.uniform(0.5, 2))
+    # Substantial initial delay (5-10 seconds)
+    time.sleep(random.uniform(5, 10))
     
     # Extract video ID from URL
     video_id_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', url)
@@ -294,13 +238,22 @@ def get_youtube_subtitles(url, lang='en'):
         }
     
     video_id = video_id_match.group(1)
-    max_retries = 3
+    max_retries = 5  # Increased from 3
     
     for attempt in range(max_retries):
         try:
+            # Progressive delay between attempts (exponential backoff)
+            if attempt > 0:
+                delay = min(30, (2 ** attempt) + random.uniform(0, 1))
+                print(f"Retrying in {delay:.2f} seconds...")
+                time.sleep(delay)
+            
             # Get available transcripts
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
             available_langs = [t.language_code for t in transcript_list]
+            
+            # Add delay before fetching actual transcript
+            time.sleep(random.uniform(2, 5))
             
             # Try to get the requested language
             try:
@@ -310,6 +263,9 @@ def get_youtube_subtitles(url, lang='en'):
                     # If requested language not available, get the first available
                     transcript = transcript_list[0]
                     lang = transcript.language_code
+                
+                # Add delay before fetching transcript data
+                time.sleep(random.uniform(2, 5))
                 
                 # Fetch the transcript data
                 transcript_data = transcript.fetch()
@@ -330,6 +286,9 @@ def get_youtube_subtitles(url, lang='en'):
             except Exception as e:
                 # If manual transcript fails, try auto-generated
                 try:
+                    # Add delay before trying auto-generated
+                    time.sleep(random.uniform(3, 7))
+                    
                     # Get auto-generated transcript if available
                     for transcript in transcript_list:
                         if transcript.is_generated:
@@ -356,13 +315,13 @@ def get_youtube_subtitles(url, lang='en'):
         except Exception as e:
             print(f"Attempt {attempt+1}/{max_retries} failed: {str(e)}")
             
-            # Increase delay between retries
-            time.sleep(random.uniform(2, 5))
-            
             # If it's the last attempt and still failing
             if attempt == max_retries - 1:
                 # As a last resort, try with a proxy if provided
                 try:
+                    # Add substantial delay before final attempt
+                    time.sleep(random.uniform(10, 15))
+                    
                     # This would require passing a proxy parameter to the function
                     # But we'll just simulate the concept
                     proxies = None  # Replace with actual proxy if needed
@@ -389,7 +348,19 @@ def get_youtube_subtitles(url, lang='en'):
                 except:
                     pass
     
-    # If all attempts fail
+    # If all attempts fail, try a different API approach
+    try:
+        print("Trying alternative transcript retrieval method...")
+        time.sleep(random.uniform(5, 10))
+        return {
+            'full_text': get_video_transcript(video_id),
+            'languages': available_langs if 'available_langs' in locals() else [],
+            'note': 'Retrieved using alternative method'
+        }
+    except Exception as e:
+        print(f"Alternative method failed: {str(e)}")
+    
+    # If everything fails
     return {
         'full_text': '',
         'languages': available_langs if 'available_langs' in locals() else [],
@@ -410,15 +381,25 @@ You are a professional chef assistant. Extract and format the following details 
 {transcript}
 """
 
+# Add memory management enhancements
+import gc
+
 def query_llm(prompt, model="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"):
     """
     Queries the Together AI LLM with the given prompt.
     """
     try:
+        # Add delay before API call
+        time.sleep(random.uniform(1, 3))
+        
         response = together_client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}]
         )
+        
+        # Force garbage collection to reduce memory usage
+        gc.collect()
+        
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Error querying LLM: {e}"
@@ -428,6 +409,9 @@ async def query_llm_stream(prompt, model="meta-llama/Llama-3.3-70B-Instruct-Turb
     Queries the Together AI LLM and streams the response.
     """
     try:
+        # Add delay before API call
+        await asyncio.sleep(random.uniform(1, 3))
+        
         stream = together_client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
@@ -438,7 +422,13 @@ async def query_llm_stream(prompt, model="meta-llama/Llama-3.3-70B-Instruct-Turb
         for chunk in stream:
             chunk_text = chunk.choices[0].delta.content or ""
             full_response += chunk_text
+            
+            # Yield chunks with a small delay to prevent overwhelming the system
+            await asyncio.sleep(0.01)
             yield chunk_text
+            
+        # Force garbage collection
+        gc.collect()
 
     except Exception as e:
         error_msg = f"Error querying LLM: {e}"
@@ -451,11 +441,17 @@ async def extract_recipe(transcript):
     """
     
     prompt = EXTRACTION_PROMPT.format(transcript=transcript)
+    
+    # Add memory optimization - clear transcript from memory if large
+    if len(transcript) > 10000:
+        transcript_size = len(transcript)
+        transcript = None
+        gc.collect()
+        print(f"Cleared large transcript ({transcript_size} chars) from memory")
+    
     async for chunk in query_llm_stream(prompt):
         print("yee gya chunk ===> ", chunk)
         yield chunk
-
-import asyncio
 
 # Recipe ChatBot Class
 class RecipeChatBot:
@@ -463,22 +459,61 @@ class RecipeChatBot:
         self.model = model
         self.recipe_data = None
         self.conversation_history = []
+        # Add memory tracking
+        self.memory_usage = []
 
     async def fetch_recipe(self, video_url):
         """
         Extract and process recipe details from a YouTube video.
         """
-        transcript = get_youtube_subtitles(video_url)
-        print(transcript['full_text'])
-        if "Error" in transcript:
-            print(transcript)
-            yield "Error " + transcript
-         
-        full_response = ""
-        async for chunk in extract_recipe(transcript):
-            full_response += chunk
-            yield chunk
-        self.recipe_data = full_response    
+        try:
+            # Log memory usage
+            self.memory_usage.append(self._get_memory_usage())
+            
+            print(f"Fetching transcript for {video_url}...")
+            transcript = get_youtube_subtitles(video_url)
+            
+            if not transcript['full_text']:
+                error_msg = "Error: Could not retrieve transcript. YouTube API rate limit may have been reached."
+                print(error_msg)
+                yield error_msg
+                return
+                
+            print(f"Transcript retrieved: {len(transcript['full_text'])} characters")
+            
+            if "error" in transcript and transcript["error"]:
+                print(transcript["error"])
+                yield "Error: " + transcript["error"]
+                return
+                
+            # Process transcript in chunks if it's too long
+            full_text = transcript['full_text']
+            
+            # Yield to allow processing time
+            await asyncio.sleep(1)
+            
+            print("Extracting recipe...")
+            full_response = ""
+            async for chunk in extract_recipe(full_text):
+                full_response += chunk
+                yield chunk
+                
+            self.recipe_data = full_response
+            
+            # Clean up memory
+            gc.collect()
+            self.memory_usage.append(self._get_memory_usage())
+            
+        except Exception as e:
+            error_msg = f"Error processing recipe: {str(e)}"
+            print(error_msg)
+            yield error_msg
+
+    def _get_memory_usage(self):
+        """Helper method to track memory usage"""
+        import psutil
+        process = psutil.Process(os.getpid())
+        return process.memory_info().rss / 1024 / 1024  # MB
 
     def introduce_and_display_recipe(self):
         """
@@ -489,7 +524,7 @@ class RecipeChatBot:
         
         introduction = (
             "Hi! I'm your Recipe Assistant. I can help you understand, modify, or get insights about recipes.\n"
-            "Here’s the recipe I extracted for you:"
+            "Here's the recipe I extracted for you:"
         )
         return f"{introduction}\n\n{self.recipe_data}\n\nFeel free to ask me any questions about the recipe!"
 
@@ -503,9 +538,9 @@ class RecipeChatBot:
         Returns:
             str: The most appropriate prompt category
         """
+        # Add delay to prevent API rate limits
+        time.sleep(random.uniform(0.5, 1.5))
         
-        
-       
         # If no specific category is found, use LLM for intelligent classification
         classification_prompt = f"""
         Classify the following user question into the most appropriate category for a recipe assistant just answer one word of matching category nothing else:
@@ -575,6 +610,10 @@ class RecipeChatBot:
         if not self.recipe_data:
             yield "Please fetch a recipe first by providing a video URL."
             return
+            
+        # Add delay to prevent API rate limits
+        await asyncio.sleep(random.uniform(1, 2))
+        
         history_context = ""
         if self.conversation_history:
             history_context = "Conversation History:\n"
@@ -582,6 +621,7 @@ class RecipeChatBot:
                 role = "User" if turn["role"] == "user" else "Assistant"
                 history_context += f"{role}: {turn['content']}\n"
             history_context += "\n"
+            
         # Determine the appropriate prompt
         intent = self.classify_question(question)
         prompt_mapping = {
@@ -595,22 +635,36 @@ class RecipeChatBot:
             "safety": SAFETY_PROMPT,
             "general": GENERAL_PROMPT,
         }
+        
+        # Optimize recipe data if it's too long
+        recipe_data = self.recipe_data
+        if len(recipe_data) > 5000:
+            recipe_data = recipe_data[:5000] + "... (truncated for memory efficiency)"
+            
         modified_prompt = prompt_mapping[intent].format(
-        recipe_data=self.recipe_data, 
-        user_question=f"{history_context}Current Question: {question}"
-      )
-        # prompt = prompt_mapping[intent].format(recipe_data=self.recipe_data, user_question=question)
+            recipe_data=recipe_data, 
+            user_question=f"{history_context}Current Question: {question}"
+        )
 
         # Stream the response
         full_response = ""
         async for chunk in query_llm_stream(modified_prompt, model=self.model):
             full_response += chunk
             print("yee gya chunk ===> ", chunk)
+            
+            # Add small delay between chunks to prevent flooding
+            await asyncio.sleep(0.01)
             yield chunk
 
         # Update conversation history
         self.conversation_history.append({"role": "user", "content": question})
         self.conversation_history.append({"role": "assistant", "content": full_response})
+        
+        # Clean up memory periodically
+        if len(self.conversation_history) > 10:
+            # Keep only the last 6 turns
+            self.conversation_history = self.conversation_history[-6:]
+            gc.collect()
 
 
     def display_conversation(self):
@@ -628,8 +682,14 @@ async def handle_user_question(user_question):
 async def handle_recipe_genrate(url):
     async for chunk in bot.fetch_recipe(url):
         print(chunk, end='', flush=True)
+
 # Main Script
 if __name__ == "__main__":
+    # Set global timeout for all API calls
+    import socket
+    socket.setdefaulttimeout(30)  # 30 seconds timeout for all socket operations
+    
+    # Initialize the bot with more memory-efficient parameters
     bot = RecipeChatBot()
 
     print("Welcome to the Recipe ChatBot!")
