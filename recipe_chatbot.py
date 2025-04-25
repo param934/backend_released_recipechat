@@ -206,6 +206,9 @@ def get_youtube_subtitles(url, lang='en'):
     Returns:
         dict: A dictionary containing subtitle information
     """
+    # Configure user agent and headers to appear more like a browser
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    
     # Configure yt-dlp options for subtitle extraction
     ydl_opts = {
         'writesubtitles': True,
@@ -213,6 +216,22 @@ def get_youtube_subtitles(url, lang='en'):
         'subtitleslangs': [lang],
         'skip_download': True,
         'subtitlesformat': 'json3',  # Prefer JSON format for better parsing
+        'quiet': True,
+        # Add browser-like headers
+        'http_headers': {
+            'User-Agent': user_agent,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Referer': 'https://www.youtube.com/',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-origin'
+        },
+        # Add cookies support if needed
+        # 'cookiefile': 'cookies.txt',
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -236,9 +255,17 @@ def get_youtube_subtitles(url, lang='en'):
                 # Use the first (usually best quality) subtitle URL
                 sub_url = subtitle_info[0]['url']
                 
-                # Fetch subtitle content
+                # Fetch subtitle content with proper headers
                 import urllib.request
-                with urllib.request.urlopen(sub_url) as response:
+                req = urllib.request.Request(
+                    sub_url,
+                    headers={
+                        'User-Agent': user_agent,
+                        'Accept': 'application/json,text/plain,*/*',
+                        'Referer': 'https://www.youtube.com/'
+                    }
+                )
+                with urllib.request.urlopen(req) as response:
                     subtitle_content = response.read().decode('utf-8')
                 
                 # Try parsing as JSON first
