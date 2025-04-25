@@ -203,7 +203,7 @@ def clean_subtitle_text(subtitle_data):
 
 def get_youtube_subtitles(url, lang='en'):
     """
-    Fetch YouTube subtitles as a clean, formatted string with improved anti-bot detection
+    Fetch YouTube subtitles as a clean, formatted string using youtube-transcript-api
     
     Args:
         url (str): YouTube video URL
@@ -212,154 +212,126 @@ def get_youtube_subtitles(url, lang='en'):
     Returns:
         dict: A dictionary containing subtitle information
     """
+    import re
+    import time
+    import random
+    from youtube_transcript_api import YouTubeTranscriptApi
+    
     # Random delay to appear more human-like (0.5 to 2 seconds)
     time.sleep(random.uniform(0.5, 2))
     
-    try:
-        # Generate a random user agent (install with: pip install fake-useragent)
-        ua = UserAgent()
-        user_agent = ua.random
-    except:
-        # Fallback user agents if fake_useragent fails
-        user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
-        ]
-        user_agent = random.choice(user_agents)
+    # Extract video ID from URL
+    video_id_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', url)
+    if not video_id_match:
+        return {
+            'full_text': '',
+            'languages': [],
+            'error': 'Invalid YouTube URL'
+        }
     
-    # Configure yt-dlp options with robust anti-detection measures
-    ydl_opts = {
-        'writesubtitles': True,
-        'writeautomaticsub': True,
-        'subtitleslangs': [lang],
-        'skip_download': True,
-        'subtitlesformat': 'json3',
-        'quiet': True,
-        'no_warnings': True,
-        'ignoreerrors': True,
-        'sleep_interval': random.uniform(1, 3),  # Random sleep between requests
-        'max_sleep_interval': 5,
-        'http_headers': {
-            'User-Agent': user_agent,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Referer': 'https://www.youtube.com/',
-            'DNT': '1',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Sec-Fetch-User': '?1',
-            'Cache-Control': 'max-age=0',
-        },
-        # Try to use Invidious API as fallback
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web'],  # Try different clients
-                'player_skip': ['configs', 'webpage'],  # Skip some unnecessary data
-            }
-        },
-    }
-    
+    video_id = video_id_match.group(1)
     max_retries = 3
+    
     for attempt in range(max_retries):
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Extract video information
-                info = ydl.extract_info(url, download=False)
-                
-                # List available languages
-                available_langs = list(info.get('subtitles', {}).keys()) or \
-                                list(info.get('automatic_captions', {}).keys())
-                
-                # If specified language not found, try the first available
-                if lang not in available_langs and available_langs:
-                    lang = available_langs[0]
-                
-                # Prefer manual subtitles, fall back to auto-generated
-                subtitle_info = (info.get('subtitles', {}).get(lang) or 
-                                info.get('automatic_captions', {}).get(lang))
-                
-                if subtitle_info:
-                    # Use the first (usually best quality) subtitle URL
-                    sub_url = subtitle_info[0]['url']
-                    
-                    # Add random delay before fetching the subtitle content
-                    time.sleep(random.uniform(0.5, 1.5))
-                    
-                    # Fetch subtitle content with proper headers
-                    headers = {
-                        'User-Agent': user_agent,
-                        'Accept': 'application/json,text/plain,*/*',
-                        'Referer': 'https://www.youtube.com/',
-                        'Origin': 'https://www.youtube.com',
-                        'Connection': 'keep-alive',
-                        'Sec-Fetch-Dest': 'empty',
-                        'Sec-Fetch-Mode': 'cors',
-                        'Sec-Fetch-Site': 'cross-site',
-                    }
-                    
-                    req = urllib.request.Request(sub_url, headers=headers)
-                    with urllib.request.urlopen(req) as response:
-                        subtitle_content = response.read().decode('utf-8')
-                    
-                    # Try parsing as JSON first
-                    try:
-                        subtitle_json = json.loads(subtitle_content)
-                    except json.JSONDecodeError:
-                        subtitle_json = subtitle_content
-                    
-                    # Clean and format the subtitle text
-                    full_text = clean_subtitle_text(subtitle_json)
-                    
-                    return {
-                        'full_text': full_text,
-                        'languages': available_langs
-                    }
-                
-                # If no subtitles found
-                return {
-                    'full_text': '',
-                    'languages': available_langs
-                }
+            # Get available transcripts
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            available_langs = [t.language_code for t in transcript_list]
             
+            # Try to get the requested language
+            try:
+                if lang in available_langs:
+                    transcript = transcript_list.find_transcript([lang])
+                else:
+                    # If requested language not available, get the first available
+                    transcript = transcript_list[0]
+                    lang = transcript.language_code
+                
+                # Fetch the transcript data
+                transcript_data = transcript.fetch()
+                
+                # Format full text from transcript entries
+                full_text = ""
+                for entry in transcript_data:
+                    full_text += entry['text'] + " "
+                
+                full_text = full_text.strip()
+                
+                return {
+                    'full_text': full_text,
+                    'languages': available_langs,
+                    'transcript_data': transcript_data  # Return the original transcript data too
+                }
+                
+            except Exception as e:
+                # If manual transcript fails, try auto-generated
+                try:
+                    # Get auto-generated transcript if available
+                    for transcript in transcript_list:
+                        if transcript.is_generated:
+                            transcript_data = transcript.fetch()
+                            
+                            # Format full text from transcript entries
+                            full_text = ""
+                            for entry in transcript_data:
+                                full_text += entry['text'] + " "
+                            
+                            full_text = full_text.strip()
+                            
+                            return {
+                                'full_text': full_text,
+                                'languages': available_langs,
+                                'transcript_data': transcript_data,
+                                'note': 'Using auto-generated transcript'
+                            }
+                except:
+                    pass
+                
+                raise e
+                
         except Exception as e:
             print(f"Attempt {attempt+1}/{max_retries} failed: {str(e)}")
+            
             # Increase delay between retries
             time.sleep(random.uniform(2, 5))
             
-            # Change user agent between attempts
-            try:
-                user_agent = UserAgent().random
-                ydl_opts['http_headers']['User-Agent'] = user_agent
-            except:
-                user_agents = [
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
-                ]
-                user_agent = random.choice(user_agents)
-                ydl_opts['http_headers']['User-Agent'] = user_agent
-            
-            # Try different approach on last attempt
+            # If it's the last attempt and still failing
             if attempt == max_retries - 1:
-                # As a last resort, try using a different extractor
-                ydl_opts['extractor_args'] = {
-                    'youtube': {
-                        'player_client': ['tv_embedded', 'android'],
-                    }
-                }
+                # As a last resort, try with a proxy if provided
+                try:
+                    # This would require passing a proxy parameter to the function
+                    # But we'll just simulate the concept
+                    proxies = None  # Replace with actual proxy if needed
+                    if proxies:
+                        transcript_data = YouTubeTranscriptApi.get_transcript(
+                            video_id, 
+                            languages=[lang],
+                            proxies=proxies
+                        )
+                        
+                        # Format full text from transcript entries
+                        full_text = ""
+                        for entry in transcript_data:
+                            full_text += entry['text'] + " "
+                        
+                        full_text = full_text.strip()
+                        
+                        return {
+                            'full_text': full_text,
+                            'languages': [lang],  # We don't know other languages when using direct method
+                            'transcript_data': transcript_data,
+                            'note': 'Retrieved using proxy'
+                        }
+                except:
+                    pass
     
     # If all attempts fail
     return {
         'full_text': '',
-        'languages': []
+        'languages': available_langs if 'available_langs' in locals() else [],
+        'error': 'Failed to retrieve transcript'
     }
+
 
 # Step 2: Recipe Extraction Prompt
 EXTRACTION_PROMPT = """
