@@ -203,7 +203,7 @@ from googleapiclient.discovery import build
 
 def get_youtube_service():
     SCOPES = ['https://www.googleapis.com/auth/youtube.readonly']
-    SERVICE_ACCOUNT_FILE = 'path/to/service-account-key.json'
+    SERVICE_ACCOUNT_FILE = 'client_secret.json'
     
     credentials = service_account.Credentials.from_service_account_file(
         SERVICE_ACCOUNT_FILE, scopes=SCOPES)
