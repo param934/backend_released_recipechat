@@ -10,6 +10,10 @@ from together import Together
 import time
 import random
 from youtube_transcript_api import YouTubeTranscriptApi
+import pickle
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
 
 NUTRITION_PROMPT = """
 You are a dietitian. Analyze the recipe details below to calculate the nutritional values (calories, protein, carbs, fat, fiber, vitamins). Provide per-serving and total values if applicable. Answer only what is asked by the user.
@@ -117,7 +121,6 @@ Include relevant culinary techniques, ingredient substitutions, or time-saving t
 Maintain a respectful, supportive, and encouraging tone.
 """
 
-
 # Suppress warnings and logging for cleaner output
 warnings.filterwarnings("ignore")
 logging.getLogger("transformers").setLevel(logging.ERROR)
@@ -195,6 +198,76 @@ def clean_subtitle_text(subtitle_data):
     full_text = ' '.join(full_text.split())
 
     return full_text
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+
+def get_youtube_service():
+    SCOPES = ['https://www.googleapis.com/auth/youtube.readonly']
+    SERVICE_ACCOUNT_FILE = 'path/to/service-account-key.json'
+    
+    credentials = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+    
+    return build('youtube', 'v3', credentials=credentials)
+def get_video_transcript(video_id):
+    youtube = get_youtube_service()  # Your OAuth setup function
+    
+    try:
+        # List available caption tracks for the video
+        captions_response = youtube.captions().list(
+            part="snippet",
+            videoId=video_id
+        ).execute()
+        
+        # Find English captions, or use the first available
+        caption_id = None
+        for item in captions_response.get('items', []):
+            if item['snippet']['language'] == 'en':
+                caption_id = item['id']
+                break
+        
+        # If no English caption found, try to use the first available
+        if not caption_id and captions_response.get('items'):
+            caption_id = captions_response['items'][0]['id']
+        
+        if not caption_id:
+            return "No captions available for this video."
+        
+        # Download the caption track
+        subtitle = youtube.captions().download(
+            id=caption_id,
+            tfmt='srt'  # Format options: srt, sub, sbv, or ttml
+        ).execute()
+        
+        # Process the subtitle content (SRT format) into plain text
+        return convert_srt_to_text(subtitle)
+        
+    except Exception as e:
+        return f"Error fetching transcript: {str(e)}"
+
+def convert_srt_to_text(srt_content):
+    """Convert SRT formatted subtitle to plain text"""
+    import re
+    
+    # Remove time codes, indices, and extra whitespace
+    text_only = re.sub(r'\d+\n\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}\n', '\n', srt_content)
+    text_only = re.sub(r'^\s*\n', '', text_only, flags=re.MULTILINE)
+    
+    # Join lines into paragraphs
+    paragraphs = []
+    current_paragraph = []
+    
+    for line in text_only.split('\n'):
+        if line.strip():
+            current_paragraph.append(line.strip())
+        elif current_paragraph:
+            paragraphs.append(' '.join(current_paragraph))
+            current_paragraph = []
+    
+    if current_paragraph:
+        paragraphs.append(' '.join(current_paragraph))
+    
+    return '\n\n'.join(paragraphs)
 
 def get_youtube_subtitles(url, lang='en'):
     """
@@ -547,6 +620,7 @@ class RecipeChatBot:
         for turn in self.conversation_history:
             role = turn["role"].capitalize()
             print(f"{role}: {turn['content']}")
+
 async def handle_user_question(user_question):
     async for chunk in bot.ask_question_stream(user_question):
         print(chunk, end='', flush=True)
