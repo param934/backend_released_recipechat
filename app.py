@@ -7,7 +7,7 @@ app = Flask(__name__)
 
 # Update allowed origins to include your deployed frontend URL
 allowed_origins = [
-    "http://192.168.56.1:3000",  # Local development
+    "http://192.168.188.96:3000",  # Local development
     "https://recipechat.netlify.app",  # Deployed frontend
 ]
 CORS(app, supports_credentials=True, origins=allowed_origins)
