@@ -3,18 +3,13 @@ import logging
 import re
 from langchain_community.llms.ollama import Ollama
 import asyncio
-import yt_dlp
-import re
-import json
+# import yt_dlp
 import os
 from dotenv import load_dotenv
-from fake_useragent import UserAgent
 from together import Together
 import time
 import random
-import urllib.request
-import urllib.parse
-import urllib.error
+from youtube_transcript_api import YouTubeTranscriptApi
 
 NUTRITION_PROMPT = """
 You are a dietitian. Analyze the recipe details below to calculate the nutritional values (calories, protein, carbs, fat, fiber, vitamins). Provide per-serving and total values if applicable. Answer only what is asked by the user.
@@ -212,10 +207,6 @@ def get_youtube_subtitles(url, lang='en'):
     Returns:
         dict: A dictionary containing subtitle information
     """
-    import re
-    import time
-    import random
-    from youtube_transcript_api import YouTubeTranscriptApi
     
     # Random delay to appear more human-like (0.5 to 2 seconds)
     time.sleep(random.uniform(0.5, 2))
