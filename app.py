@@ -3,7 +3,6 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 from recipe_chatbot import RecipeChatBot
-from youtube_transcript_api import YouTubeTranscriptApi
 app = Flask(__name__)
 
 # Update allowed origins to include your deployed frontend URL

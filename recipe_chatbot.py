@@ -8,7 +8,7 @@ import re
 import json
 import os
 from dotenv import load_dotenv
-from fake_useragent import UserAgent 
+from fake_useragent import UserAgent
 from together import Together
 
 NUTRITION_PROMPT = """
