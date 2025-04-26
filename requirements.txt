@@ -18,3 +18,4 @@ google-auth-oauthlib>=1.2.2
 google-auth>=2.39.0
 google-api-python-client>=2.168.0
 backoff>=2.2.1
+psutil==7.0.0
