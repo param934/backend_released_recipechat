@@ -9,8 +9,7 @@ from together import Together
 import time
 import random
 from youtube_transcript_api import YouTubeTranscriptApi
-import pickle
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2 import service_account
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 import backoff  # Add this library for exponential backoff
@@ -107,7 +106,7 @@ def clean_subtitle_text(subtitle_data):
     return full_text
 
 # Add session tracking to avoid rate limits
-from requests.adapters import HTTPAdapter
+from requests.adapters import HTTPAdapter, Retry
 import requests
 
 # Create a session with retry capability
@@ -128,6 +127,7 @@ def create_session_with_retry():
                      (Exception),
                      max_tries=5,
                      max_time=300)
+
 def get_youtube_service():
     SCOPES = ['https://www.googleapis.com/auth/youtube.readonly']
     SERVICE_ACCOUNT_FILE = 'client_secret.json'
@@ -206,7 +206,7 @@ def convert_srt_to_text(srt_content):
     
     return '\n\n'.join(paragraphs)
 
-# Modified with improved retry and delay strategy
+# retry and delay strategies implemented
 @backoff.on_exception(backoff.expo, 
                      (Exception), 
                      max_tries=5,
@@ -595,7 +595,6 @@ class RecipeChatBot:
             # Fallback to general if LLM classification fails
             return "general"
 
-
     async def ask_question_stream(self, question):
         """
         Asynchronous method to generate a streaming response to the user's question.
@@ -664,7 +663,6 @@ class RecipeChatBot:
             # Keep only the last 6 turns
             self.conversation_history = self.conversation_history[-6:]
             gc.collect()
-
 
     def display_conversation(self):
         """
