@@ -108,7 +108,6 @@ def clean_subtitle_text(subtitle_data):
 
 # Add session tracking to avoid rate limits
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
 import requests
 
 # Create a session with retry capability
@@ -126,7 +125,7 @@ def create_session_with_retry():
 
 # Modified YouTube service function with retry
 @backoff.on_exception(backoff.expo, 
-                     (Exception), 
+                     (Exception),
                      max_tries=5,
                      max_time=300)
 def get_youtube_service():
