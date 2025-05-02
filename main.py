@@ -6,7 +6,7 @@ from recipe_chatbot import RecipeChatBot
 app = Flask(__name__)
 
 allowed_origins = [
-    "http://localhost:3000",  # Local developme
+    "http://localhost:3000",  # Local development
     # "http://192.168.1.20:3000",  # Local development
     "https://recipechat.netlify.app",  # Deployed frontend
 ]
