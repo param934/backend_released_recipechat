@@ -66,8 +66,8 @@ availableSecrets:
 # Define substitutions (variables)
 substitutions:
   _SERVICE_NAME: "recipe-chat-backend" # Choose a name for your Cloud Run service
-  _CLOUD_RUN_REGION: "asia-south2" # Choose a GCP region for Cloud Run
-  _ARTIFACT_REGISTRY_REGION: "asia-south2" # Choose the same or nearby region for Artifact Registry
+  _CLOUD_RUN_REGION: "asia-east1" # Choose a GCP region for Cloud Run
+  _ARTIFACT_REGISTRY_REGION: "asia-east1" # Choose the same or nearby region for Artifact Registry
   _ARTIFACT_REGISTRY_REPO: "app-images" # Choose a name for your Artifact Registry repository
 
 options:
