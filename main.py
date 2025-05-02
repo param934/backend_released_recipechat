@@ -6,13 +6,13 @@ from recipe_chatbot import RecipeChatBot
 app = Flask(__name__)
 
 allowed_origins = [
-    "http://localhost:3000",  # Local development
+    "http://localhost:3000",  # Local developme
     # "http://192.168.1.20:3000",  # Local development
     "https://recipechat.netlify.app",  # Deployed frontend
 ]
 CORS(app, supports_credentials=True, origins=allowed_origins)
 app.config['DEBUG'] = os.environ.get('FLASK_DEBUG')
-# Update SocketIO configuration
+# Update SocketIO configuratio
 socketio = SocketIO(
     app, 
     cors_allowed_origins=allowed_origins,
