@@ -130,7 +130,7 @@ def create_session_with_retry():
 
 def get_youtube_service():
     SCOPES = ['https://www.googleapis.com/auth/youtube.readonly']
-    SERVICE_ACCOUNT_FILE = 'client_secret.json'
+    SERVICE_ACCOUNT_FILE = '/secrets/client_secret.json'
     
     # Add delay before creating service
     time.sleep(random.uniform(2, 5))
