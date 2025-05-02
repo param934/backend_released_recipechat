@@ -1,0 +1,74 @@
+# cloudbuild.yaml
+steps:
+  # 1. Build the container image
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      [
+        "build",
+        "-t",
+        "${_ARTIFACT_REGISTRY_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}",
+        ".", # Build context is the current directory
+        "-f",
+        "Dockerfile", # Specify the Dockerfile name
+      ]
+
+  # 2. Push the container image to Artifact Registry
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      [
+        "push",
+        "${_ARTIFACT_REGISTRY_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}",
+      ]
+
+  # 3. Deploy container image to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      [
+        "run",
+        "deploy",
+        "${_SERVICE_NAME}", # Name of your Cloud Run service
+        "--image",
+        "${_ARTIFACT_REGISTRY_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}",
+        "--region",
+        "${_CLOUD_RUN_REGION}",
+        "--platform",
+        "managed",
+        "--quiet", # Suppress interactive prompts
+        # Allow unauthenticated access (adjust if you need authentication)
+        "--allow-unauthenticated",
+        # Map secrets to environment variables in Cloud Run
+        "--update-secrets=TOGETHER_API_KEY=together-api-key:latest",
+        "--update-secrets=FLASK_DEBUG=flask-debug:latest",
+        "--update-secrets=PORT=port:latest",
+        # Mount the client_secret.json content as a file volume
+        "--update-secrets=/secrets/client_secret.json=client-secret-json:latest",
+      ]
+    # Make secrets available to this step (needed for --update-secrets)
+    secretEnv: ["TOGETHER_API_KEY", "FLASK_DEBUG", "PORT", "CLIENT_SECRET_JSON"]
+
+# Specify the image to be pushed after the build
+images:
+  - "${_ARTIFACT_REGISTRY_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}"
+
+# Define secrets to be available to build steps (referenced by secretEnv above)
+availableSecrets:
+  secretManager:
+    - versionName: projects/${PROJECT_ID}/secrets/together-api-key/versions/latest
+      env: "TOGETHER_API_KEY" # Env var name inside the build step (not Cloud Run)
+    - versionName: projects/${PROJECT_ID}/secrets/flask-debug/versions/latest
+      env: "FLASK_DEBUG"
+    - versionName: projects/${PROJECT_ID}/secrets/port/versions/latest
+      env: "PORT"
+    - versionName: projects/${PROJECT_ID}/secrets/client-secret-json/versions/latest
+      env: "CLIENT_SECRET_JSON"
+
+# Define substitutions (variables)
+substitutions:
+  _SERVICE_NAME: "recipe-chat-backend" # Choose a name for your Cloud Run service
+  _CLOUD_RUN_REGION: "asia-south2" # Choose a GCP region for Cloud Run
+  _ARTIFACT_REGISTRY_REGION: "asia-south2" # Choose the same or nearby region for Artifact Registry
+  _ARTIFACT_REGISTRY_REPO: "app-images" # Choose a name for your Artifact Registry repository
+
+options:
+  logging: CLOUD_LOGGING_ONLY

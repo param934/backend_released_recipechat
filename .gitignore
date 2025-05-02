@@ -1,0 +1,22 @@
+# Secrets
+.env
+client_secret.json
+
+# Python cache/compiled files
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# IDE / OS files
+.idea/
+.vscode/
+*.DS_Store
