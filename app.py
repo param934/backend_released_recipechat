@@ -87,7 +87,7 @@ def fetch_recipe_stream(data):
 
             asyncio.run(stream_recipe())
 
-        except Exception as e:
+        except Exception as e:  
             print(f"Error in fetch_recipe_stream: {str(e)}")
             socketio.emit('recipe_stream', {"error": str(e)})
 
