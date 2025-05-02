@@ -1,4 +1,4 @@
-FROM python:3.9.17-bookworm
+FROM python:3.12.4-bookworm
 ENV APP_HOME /back-end
 WORKDIR $APP_HOME
 COPY . ./
