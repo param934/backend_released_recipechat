@@ -109,7 +109,7 @@ def clean_subtitle_text(subtitle_data):
 from requests.adapters import HTTPAdapter, Retry
 import requests
 
-# Create a session with retry capability
+# Create a session with retry capabilityy
 def create_session_with_retry():
     session = requests.Session()
     retries = Retry(
