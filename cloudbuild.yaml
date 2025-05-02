@@ -40,7 +40,6 @@ steps:
         # Map secrets to environment variables in Cloud Run
         "--update-secrets=TOGETHER_API_KEY=together-api-key:latest",
         "--update-secrets=FLASK_DEBUG=flask-debug:latest",
-        "--update-secrets=PORT=port:latest",
         # Mount the client_secret.json content as a file volume
         "--update-secrets=/secrets/client_secret.json=client-secret-json:latest",
       ]
