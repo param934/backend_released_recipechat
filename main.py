@@ -5,7 +5,6 @@ from flask_socketio import SocketIO, emit
 from recipe_chatbot import RecipeChatBot
 app = Flask(__name__)
 
-# Update allowed origins to include your deployed frontend URL
 allowed_origins = [
     "http://localhost:3000",  # Local development
     # "http://192.168.1.20:3000",  # Local development
