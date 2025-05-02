@@ -1,5 +1,4 @@
 import asyncio
-import os
 from flask import Flask
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
@@ -96,6 +95,4 @@ def fetch_recipe_stream(data):
 
 if __name__ == '__main__':
     # Bind to all network interfaces
-    port = int(os.environ.get('PORT', 8080))
-    debug_mode = os.environ.get('FLASK_DEBUG', '0') == '1'
-    socketio.run(app, debug_mode, host='0.0.0.0', port=port)
+    socketio.run(app, debug=True, host='0.0.0.0', port=8080)
