@@ -151,7 +151,6 @@ def load_proxies_from_csv(csv_file):
                 
                 # Format proxy string
                 proxy_str = f"{protocol}://{row['ip']}:{row['port']}"
-                
                 proxy_dict = {"http": proxy_str}
                 
                 # Only add HTTPS if the proxy supports it
