@@ -129,19 +129,45 @@ def create_session_with_retry():
                      max_tries=5,
                      max_time=300)
 
+
+
 def load_proxies_from_csv(csv_file):
     proxies = []
-    with open(csv_file, newline='') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            ip = row['ip']
-            port = row['port']
-            proxy = f"http://{ip}:{port}"
-            proxies.append({
-                "http": proxy,
-                "https": proxy
-            })
-    return proxies
+    print("Loading proxies from CSV file...")
+    try:
+        with open(csv_file, newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Check if required columns exist
+                if 'ip' not in row or 'port' not in row:
+                    print(f"Warning: Row missing required columns: {row}")
+                    continue
+                
+                # Get the protocol from the CSV (default to http if not present or empty)
+                protocol = row.get('protocol', 'http').strip().lower() or 'http'
+                
+                # Check if this proxy supports HTTPS
+                supports_https = row.get('allowsHttps', '').lower() == 'true'
+                
+                # Format proxy string
+                proxy_str = f"{protocol}://{row['ip']}:{row['port']}"
+                
+                proxy_dict = {"http": proxy_str}
+                
+                # Only add HTTPS if the proxy supports it
+                if supports_https:
+                    proxy_dict["https"] = proxy_str
+                
+                proxies.append(proxy_dict)
+                
+        print(f"Successfully loaded {len(proxies)} proxies from {csv_file}")
+        return proxies
+    except FileNotFoundError:
+        print(f"Error: File {csv_file} not found")
+        return []
+    except Exception as e:
+        print(f"Error loading proxies: {str(e)}")
+        return []
 
 def get_youtube_service():
     SCOPES = ['https://www.googleapis.com/auth/youtube.readonly']
@@ -600,7 +626,8 @@ class RecipeChatBot:
             self.memory_usage.append(self._get_memory_usage())
             
             print(f"Fetching transcript for {video_url}...")
-            transcript = get_youtube_subtitles(video_url,load_proxies_from_csv('proxy_list.csv'))
+            proxy=load_proxies_from_csv('proxy_list.csv')
+            transcript = get_youtube_subtitles(video_url,proxies=proxy)
             
             if not transcript['full_text']:
                 error_msg = "Error: Could not retrieve transcript. YouTube API rate limit may have been reached."
