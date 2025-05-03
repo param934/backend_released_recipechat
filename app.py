@@ -9,7 +9,7 @@ app = Flask(__name__)
 allowed_origins = [
     "http://localhost:3000",  # Local development
     # "http://192.168.1.20:3000",  # Local development
-    "https://recipechat.netlify.app",  # Deployed frontend
+    # "https://recipechat.netlify.app",  # Deployed frontend
 ]
 CORS(app, supports_credentials=True, origins=allowed_origins)
 

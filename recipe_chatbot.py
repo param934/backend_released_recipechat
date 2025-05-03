@@ -134,7 +134,7 @@ def get_youtube_service():
     
     # Add delay before creating service
     time.sleep(random.uniform(2, 5))
-    
+    print("Creating YouTube service...Service account file: ", SERVICE_ACCOUNT_FILE)
     credentials = service_account.Credentials.from_service_account_file(
         SERVICE_ACCOUNT_FILE, scopes=SCOPES)
     
@@ -146,7 +146,7 @@ def get_video_transcript(video_id):
     try:
         # Add delay before API call
         time.sleep(random.uniform(3, 7))
-        
+        print("Fetching captions for video ID:", video_id)
         # List available caption tracks for the video
         captions_response = youtube.captions().list(
             part="snippet",
