@@ -13,6 +13,7 @@ from google.oauth2 import service_account
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 import backoff  # Add this library for exponential backoff
+import csv
 
 # Keep existing prompts from the original code
 NUTRITION_PROMPT = """
@@ -128,6 +129,20 @@ def create_session_with_retry():
                      max_tries=5,
                      max_time=300)
 
+def load_proxies_from_csv(csv_file):
+    proxies = []
+    with open(csv_file, newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            ip = row['ip']
+            port = row['port']
+            proxy = f"http://{ip}:{port}"
+            proxies.append({
+                "http": proxy,
+                "https": proxy
+            })
+    return proxies
+
 def get_youtube_service():
     SCOPES = ['https://www.googleapis.com/auth/youtube.readonly']
     SERVICE_ACCOUNT_FILE = '/secrets/client_secret.json'
@@ -146,7 +161,7 @@ def get_video_transcript(video_id):
     try:
         # Add delay before API call
         time.sleep(random.uniform(3, 7))
-        print("Fetching captions for video ID:", video_id)
+        print("Fetching captions for video ID:", video_id) 
         # List available caption tracks for the video
         captions_response = youtube.captions().list(
             part="snippet",
@@ -211,7 +226,121 @@ def convert_srt_to_text(srt_content):
                      (Exception), 
                      max_tries=5,
                      max_time=300)
-def get_youtube_subtitles(url, lang='en'):
+def get_youtube_subtitles(url, lang='en', proxies=None):
+    """
+    Fetch YouTube subtitles as a clean, formatted string using youtube-transcript-api
+    with improved retry and delay mechanism
+    
+    Args:
+        url (str): YouTube video URL
+        lang (str): Language code for subtitles (default: 'en')
+        proxies (dict): Optional proxy dictionary to route the request
+    
+    Returns:
+        dict: A dictionary containing subtitle information
+    """
+    import time, random, re
+    from youtube_transcript_api import YouTubeTranscriptApi
+    
+    time.sleep(random.uniform(5, 10))  # Initial delay
+    
+    video_id_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', url)
+    if not video_id_match:
+        return {
+            'full_text': '',
+            'languages': [],
+            'error': 'Invalid YouTube URL'
+        }
+    
+    video_id = video_id_match.group(1)
+    max_retries = 5
+
+    for attempt in range(max_retries):
+        try:
+            if attempt > 0:
+                delay = min(30, (2 ** attempt) + random.uniform(0, 1))
+                print(f"Retrying in {delay:.2f} seconds...")
+                time.sleep(delay)
+
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            available_langs = [t.language_code for t in transcript_list]
+
+            time.sleep(random.uniform(2, 5))
+
+            try:
+                if lang in available_langs:
+                    transcript = transcript_list.find_transcript([lang])
+                else:
+                    transcript = transcript_list[0]
+                    lang = transcript.language_code
+
+                time.sleep(random.uniform(2, 5))
+                transcript_data = transcript.fetch()
+
+                full_text = " ".join(entry['text'] for entry in transcript_data).strip()
+
+                return {
+                    'full_text': full_text,
+                    'languages': available_langs,
+                    'transcript_data': transcript_data
+                }
+
+            except Exception:
+                try:
+                    time.sleep(random.uniform(3, 7))
+                    for transcript in transcript_list:
+                        if transcript.is_generated:
+                            transcript_data = transcript.fetch()
+                            full_text = " ".join(entry['text'] for entry in transcript_data).strip()
+                            return {
+                                'full_text': full_text,
+                                'languages': available_langs,
+                                'transcript_data': transcript_data,
+                                'note': 'Using auto-generated transcript'
+                            }
+                except:
+                    pass
+                raise
+
+        except Exception as e:
+            print(f"Attempt {attempt+1}/{max_retries} failed: {str(e)}")
+
+    # Final attempt using proxy if provided
+    if proxies:
+        try:
+            print("Trying to fetch transcript using proxy...")
+            time.sleep(random.uniform(10, 15))
+            transcript_data = YouTubeTranscriptApi.get_transcript(
+                video_id, 
+                languages=[lang],
+                proxies=proxies
+            )
+            full_text = " ".join(entry['text'] for entry in transcript_data).strip()
+            return {
+                'full_text': full_text,
+                'languages': [lang],
+                'transcript_data': transcript_data,
+                'note': 'Retrieved using proxy'
+            }
+        except Exception as e:
+            print(f"Proxy attempt failed: {str(e)}")
+
+    try:
+        print("Trying alternative transcript retrieval method...")
+        time.sleep(random.uniform(5, 10))
+        return {
+            'full_text': get_video_transcript(video_id),
+            'languages': available_langs if 'available_langs' in locals() else [],
+            'note': 'Retrieved using alternative method'
+        }
+    except Exception as e:
+        print(f"Alternative method failed: {str(e)}")
+
+    return {
+        'full_text': '',
+        'languages': available_langs if 'available_langs' in locals() else [],
+        'error': 'Failed to retrieve transcript'
+    }
     """
     Fetch YouTube subtitles as a clean, formatted string using youtube-transcript-api
     with improved retry and delay mechanism
@@ -248,6 +377,7 @@ def get_youtube_subtitles(url, lang='en'):
                 time.sleep(delay)
             
             # Get available transcripts
+            
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
             available_langs = [t.language_code for t in transcript_list]
             
@@ -470,7 +600,7 @@ class RecipeChatBot:
             self.memory_usage.append(self._get_memory_usage())
             
             print(f"Fetching transcript for {video_url}...")
-            transcript = get_youtube_subtitles(video_url)
+            transcript = get_youtube_subtitles(video_url,load_proxies_from_csv('proxy_list.csv'))
             
             if not transcript['full_text']:
                 error_msg = "Error: Could not retrieve transcript. YouTube API rate limit may have been reached."
