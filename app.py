@@ -8,8 +8,7 @@ app = Flask(__name__)
 # Update allowed origins to include your deployed frontend URL
 allowed_origins = [
     "http://localhost:3000",  # Local development
-    # "http://192.168.1.20:3000",  # Local development
-    # "https://recipechat.netlify.app",  # Deployed frontend
+    "https://recipechat.netlify.app",  # Deployed frontend
 ]
 CORS(app, supports_credentials=True, origins=allowed_origins)
 
@@ -17,11 +16,12 @@ CORS(app, supports_credentials=True, origins=allowed_origins)
 socketio = SocketIO(
     app, 
     cors_allowed_origins=allowed_origins,
-    async_mode='threading',
+    async_mode='threading',  # or 'gevent'
     logger=True,
-    engineio_logger=True
+    engineio_logger=True,
+    ping_timeout=60,  # Increase to prevent premature disconnection
+    ping_interval=25
 )
-
 # Initialize the chatbot
 chatbot = RecipeChatBot()
 
@@ -32,7 +32,7 @@ def handle_connect():
 @socketio.on('disconnect')
 def handle_disconnect():
     print("Client disconnected")
-
+    
 @socketio.on('generate_text')
 def generate_text(data):
     print("Received generate_text event with data:", data)
@@ -41,24 +41,33 @@ def generate_text(data):
         emit('response', {"error": "No prompt provided"})
         return
 
-    def run_async_generator():
+    async def stream_words():
         try:
-            async def stream_words():
-                async for word in chatbot.ask_question_stream(prompt):
+            async for word in chatbot.ask_question_stream(prompt):
+                try:
                     socketio.emit('response', {
-                        "data": word, 
+                        "data": word,
                         "streaming": True
                     })
-                    await asyncio.sleep(0.1)
-            
-            asyncio.run(stream_words())
+                except (OSError, ConnectionError) as e:
+                    print(f"Socket error during emit: {e}")
+                    socketio.emit('response', {"error": "Connection error during streaming"})
+                    return
+                await asyncio.sleep(0.1)
             socketio.emit('response', {"complete": True})
-
         except Exception as e:
             print(f"Error in stream_text: {str(e)}")
             socketio.emit('response', {"error": str(e)})
 
-    socketio.start_background_task(run_async_generator)
+    def run_async_task():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(stream_words())
+        finally:
+            loop.close()
+
+    socketio.start_background_task(run_async_task)    
 
 @socketio.on('fetch_recipe_stream')
 def fetch_recipe_stream(data):
@@ -87,7 +96,7 @@ def fetch_recipe_stream(data):
 
             asyncio.run(stream_recipe())
 
-        except Exception as e:  
+        except Exception as e:
             print(f"Error in fetch_recipe_stream: {str(e)}")
             socketio.emit('recipe_stream', {"error": str(e)})
 
@@ -95,4 +104,4 @@ def fetch_recipe_stream(data):
 
 if __name__ == '__main__':
     # Bind to all network interfaces
-    socketio.run(app, debug=True, host='0.0.0.0', port=8080)
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
